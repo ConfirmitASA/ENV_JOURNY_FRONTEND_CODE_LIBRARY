@@ -105,6 +105,14 @@ function getTextNodeHeight(textNode) {
     return height;
 }
 
+// function tries to convert string value (it might be percentage or money value) to Number 
+// @param {string} str
+// @return {Number} converted value or Nan if it cannot be cast
+function castToNumber(str) {
+
+	return Number(str.replace(/[%$]/g,""));
+}
+
 
 // --------------------  HELP FUNCTIONS END --------------------   
 
@@ -113,7 +121,7 @@ function getTextNodeHeight(textNode) {
 function generalNoDataCheck(){
 
         // Get the display text from the config
-       var strMessage = ReportTemplateConfig.noDataWarning;
+       var strMessage = ReportTemplateConfig.translations.NoDataToDisplay;
 
         // Card Type: Card Content
 	var trendCardContent = Array.prototype.slice.call(document.querySelectorAll(".card__content div"));
@@ -185,16 +193,44 @@ function generalNoDataCheck(){
                 }
         });
 
-        // Card Type: KPI Gauge
-        var trendKPIGauge = Array.prototype.slice.call(document.querySelectorAll(".layout__card.card_type_kpi .full-gauge__score"));
-            trendKPIGauge.forEach(function (item) {
+
+		// TREND TABLE Type 4: No data at all (in case when table has not hide script)
+		var trendTable_4 = Array.prototype.slice.call(document.querySelectorAll(".card__table-container .table-container"));
+		trendTable_4.forEach(function (item) {
+			var itemTBody = item.querySelector('table tbody');
+			if(!itemTBody || itemTBody && itemTBody.children.length == 0){
+
+				item.innerHTML = strMessage;
+
+				item.classList.add("NoDatatoDisplay");
+				item.classList.add("NoDatatoDisplay_FontMedium");
+				//console.log("trendTable_4");
+			}
+		});
+
+        // Card Type: KPI Gauge or Line List
+        var trendKPI = Array.prototype.slice.call(document.querySelectorAll(".layout__card.card_type_kpi .full-gauge__score, .layout__card.card_type_kpi .card__line-list"));
+            trendKPI.forEach(function (item) {
                 if(item.innerHTML == "N/A" ||  item.innerHTML == "NaN"){
 
                     item.innerHTML = strMessage;
 
-		    item.classList.add("NoDatatoDisplay");
+					item.classList.add("NoDatatoDisplay");
                     item.classList.add("NoDatatoDisplay_FontMedium");
-                    //console.log("trendKPIGauge");
+                    //console.log("trendKPI");
+                }
+        });
+
+        // Card Type: No data at all for KPI (suppress)
+        var trendKPI_1 = Array.prototype.slice.call(document.querySelectorAll(".layout__card.card_type_kpi .card__content div[id^='kpi-data-container-']"));
+            trendKPI_1.forEach(function (item) {
+                if(!item.innerHTML){
+
+                    item.innerHTML = strMessage;
+
+					item.classList.add("NoDatatoDisplay");
+                    item.classList.add("NoDatatoDisplay_FontMedium");
+                    //console.log("trendKPI_1");
                 }
         });
 
@@ -266,6 +302,7 @@ function generalNoDataCheck(){
 // STICKY HEADER
 // it sets page padding in order to have sticky header with changable height (client logos can be different)
 // that does not hide main content when it's not scrolled
+// fires event "stickyHeaderRedrawEnd" at the end of redraw
 function stickyHeader() {
 	
 	// timeout needed because of iPhone issue; 
@@ -281,6 +318,15 @@ function stickyHeader() {
 		var filterPane = document.querySelector('.filter-pane');
 		filterPane.style.top = pageHeaderHeight + 'px';
 		filterPane.style.paddingBottom = pageHeaderHeight + 'px';  /* the same value as in the top property so the scroll-bar is enabled from the top to the end */
+		
+		if(yaMoskLibrary.GetIEVersion() == 0) { //not IE
+			var resizeEvent = new Event("stickyHeaderRedrawEnd", {bubbles: true});
+		}
+		else {
+			var resizeEvent = document.createEvent("Event");
+			resizeEvent.initEvent("stickyHeaderRedrawEnd", true, true);
+		}	
+        pageHeader.dispatchEvent(resizeEvent);		
 	}, 100);
 }
 
@@ -363,12 +409,14 @@ function adminMenuBlur(e) {
 // Show/hide filter side paneL
 function toggleFilterPanel() {
 
-  var surveyBtnTxt = ReportTemplateConfig['survey'];
-  var filterBtnTxt = ReportTemplateConfig['filters'];
+  var surveyBtnTxt = ReportTemplateConfig.translations.Survey;
+  var filterBtnTxt = ReportTemplateConfig.translations.Filters;
+  var compareBtnTxt = ReportTemplateConfig.translations.Compare;
 
   var panelElem = document.querySelector(".filter-pane");
 
   panelElem.classList.toggle("filter-pane_expanded");
+  panelElem.classList.remove('filter-pane_show-func-btns');
   var bottom_arrows = Array.prototype.slice.call(panelElem.querySelectorAll(".icon_bottom-arrow"));
   bottom_arrows.forEach(function (el) {
     return el.classList.toggle("js-hidden");
@@ -380,16 +428,21 @@ function toggleFilterPanel() {
   if (panelElem.classList.contains("filter-pane_expanded")) {
     panelElem.querySelector(".icon_survey").nextElementSibling.innerHTML = surveyBtnTxt;
     panelElem.querySelector(".icon_filter").nextElementSibling.innerHTML = filterBtnTxt;
+    panelElem.querySelector(".icon_compare").nextElementSibling.innerHTML = compareBtnTxt;
     panelElem.querySelector(".icon_right-arrow").className+=" icon_left-arrow icon_right";   // replace the right arrow icon with the left arrow icon located on the right side
     panelElem.querySelector(".icon_right-arrow").classList.remove("icon_right-arrow");
   } else {
     panelElem.querySelector(".icon_survey").nextElementSibling.innerHTML = '';
     panelElem.querySelector(".icon_filter").nextElementSibling.innerHTML = '';
+    panelElem.querySelector(".icon_compare").nextElementSibling.innerHTML = '';
     panelElem.querySelector(".icon_left-arrow").classList.add("icon_right-arrow");
     panelElem.querySelector(".icon_left-arrow").classList.remove("icon_right");
     panelElem.querySelector(".icon_left-arrow").classList.remove("icon_left-arrow");
     var sections = Array.prototype.slice.call(document.querySelectorAll(".filter-pane__section"));
     sections.forEach(function (elem, index) {
+		if (elem.classList.contains('filter-pane__section-expanded')) {
+			elem.classList.remove('filter-pane__section-expanded');
+		}
         var submenu = elem.querySelector(".filter-pane__filter-content");
         if (!submenu.classList.contains('js-hidden')) {
           submenu.classList.add('js-hidden');
@@ -413,8 +466,19 @@ function toggleSubFilterPanel(e) {
 	if (!panelElem.classList.contains("filter-pane_expanded")) {
 		toggleFilterPanel();
 	}
-	var section = findAncestor(e.target, "filter-pane__section"); 
+	
+	var section = findAncestor(e.target, "filter-pane__section");
 	var subFilterContent =  section.querySelector(".filter-pane__filter-content");
+
+	if (!section.classList.contains('filter-pane__section_type_surveys')) {
+		section.classList.toggle('filter-pane__section-expanded');
+		if (document.querySelectorAll('.filter-pane .filter-pane__section-expanded').length > 0) {
+			panelElem.classList.add('filter-pane_show-func-btns');
+		} else {
+			panelElem.classList.remove('filter-pane_show-func-btns');
+		}
+	}
+	
 	var arrow_btn = section.querySelector(".icon_bottom-arrow") || section.querySelector(".icon_up-arrow");
 	arrow_btn.classList.toggle('icon_bottom-arrow');
 	arrow_btn.classList.toggle('icon_up-arrow');
@@ -458,7 +522,9 @@ function toggleHiddenCheckbox (e) {
 
 function addFunctionalButtonsToFilterList(saveBtnText, resetBtnText) {
 	window.addEventListener('load', function() {	
-		var filterList = document.querySelector('.filter-pane__section_type_filters .filter-pane__filter-content');
+		//var filterLists = Array.prototype.slice.call(document.querySelectorAll('.filter-pane__section_type_filters .filter-pane__filter-content'));
+		//filterLists.forEach(function(filterList) {
+		var filterList = document.querySelector('.filter-pane');
 		if (filterList) {
 			var funcBtnsContainer = document.createElement('div');
 			funcBtnsContainer.classList.add('filter-pane__func-btns');
@@ -485,24 +551,127 @@ function addFunctionalButtonsToFilterList(saveBtnText, resetBtnText) {
 			resetBtn.classList.add('redesigned-button');
 			resetBtn.classList.add('filter-pane__reset-btn');
 			resetBtn.innerText = resetBtnText;
-			resetBtn.addEventListener('click', function() {
-				var filterOptions = Array.prototype.slice.call(document.querySelectorAll('.filter-pane__section_type_filters .filter__selector:not(.time-period-picker) input'));
+			resetBtn.addEventListener('click', function(e) {
+				var filterPanel = e.target.parentNode.parentNode;
+				var filterOptions = Array.prototype.slice.call(filterPanel.querySelectorAll('.filter-pane__section:not(.filter-pane__section_type_surveys) .filter__selector:not(.time-period-picker) input'));
 				filterOptions.forEach(function(option) { option.checked = false; })
-				var timeFilterOptions = Array.prototype.slice.call(document.querySelectorAll('.filter-pane__section_type_filters .filter__selector.time-period-picker input'));
+				var timeFilterOptions = Array.prototype.slice.call(filterPanel.querySelectorAll('.filter-pane__section:not(.filter-pane__section_type_surveys) .filter__selector.time-period-picker input'));
 				timeFilterOptions.forEach(function(option, index) { 
 					option.checked = index === 0; 
 					if (option.type === "text") {
 						option.value = "";
 					}
 				});
-				__doPostBack();
+				var distributionBtn = document.querySelector("#distribution-btn input");
+				if (distributionBtn) {
+					reportal.showWait();
+					distributionBtn.click();
+				} else {
+					__doPostBack();
+				}
 			});
 			
 			funcBtnsContainer.appendChild(saveBtn);
 			funcBtnsContainer.appendChild(resetBtn);
 			filterList.appendChild(funcBtnsContainer);
 		}
+		//});		
 	});
+}
+
+function addLoaderOnDistributionButton() {	
+	var distributionBtn = document.querySelector("#distribution-btn input");
+	if (distributionBtn) {
+		distributionBtn.addEventListener('click', function() { reportal.showWait(); });
+	}
+}
+
+function addAllOptionToFilterSelector(selector) {
+	var tableBody = selector.querySelector('tbody');	
+	var row = document.createElement('tr');
+	var cell = document.createElement('td');
+	
+	if (!tableBody || !row || !cell) {
+		return;
+	}
+	
+	var input = document.createElement('input');
+	input.setAttribute('type', 'checkbox');
+	input.value = "r:s:_all";
+	input.addEventListener('change', function() {
+		toggleOtherOptions(input, tableBody);
+	});
+	
+	var label = document.createElement('label');
+	label.innerText = ReportTemplateConfig.translations.All;
+	label.addEventListener('click', function() {
+		input.checked = !input.checked;
+		toggleOtherOptions(input, tableBody);
+	});
+	
+	var otherOptions = Array.prototype.slice.call(tableBody.querySelectorAll('tr'));
+	addChangeEventHandlerToOtherOptions(input, otherOptions, false, false);
+	checkAllIfOtherOptionsAreSelected(input, otherOptions);
+	
+	cell.appendChild(input);
+	cell.appendChild(label);
+	row.appendChild(cell);
+	tableBody.appendChild(row);
+}
+
+function toggleOtherOptions(input, tableBody, specificValueFlag, value) {
+	var otherOptions = Array.prototype.slice.call(tableBody.querySelectorAll('tr:not(:last-child)'));
+	otherOptions.forEach(function(otherOptionRow) {
+		var otherOptionInput = otherOptionRow.querySelector('td input');
+		otherOptionInput.checked = !specificValueFlag ? input.checked : value;
+	});
+}
+
+function checkAllIfOtherOptionsAreSelected(input, otherOptions) {	
+	var activeOptions = otherOptions.filter(function (otherOption) {
+		 return !!otherOption.querySelector('input:checked');
+	});
+	if (otherOptions.length === activeOptions.length) {
+		input.checked = true;
+	}
+}
+
+function addChangeEventHandlerToOtherOptions(input, otherOptions, otherOptionChecked, value) {
+	otherOptions.forEach(function(otherOptionRow) {
+		var otherOptionInput = otherOptionRow.querySelector('td input');
+		otherOptionInput.addEventListener('change', function() {	
+			if (otherOptionInput.checked == otherOptionChecked) {
+				input.checked = value;
+			}
+		});
+	});
+}
+
+function addClickCallbackOnOtherOptionToFilterSelector(selector) {
+	var tableBody = selector.querySelector('tbody'); // we assume that 'Other' option is the last	
+	
+	if (!tableBody) {
+		return;
+	}
+	
+	var cell = tableBody.querySelector('tr:last-child td'); // we assume that 'Other' option is the last	
+	
+	if (!cell) {
+		return;
+	}
+	
+	var input = cell.querySelector('input');
+	input.addEventListener('change', function() {
+		toggleOtherOptions(input, tableBody, true, false);
+	});
+	
+	var label = cell.querySelector('label');
+	label.addEventListener('click', function() {
+		toggleOtherOptions(input, tableBody, true, false);
+	});
+	
+	var otherOptions = Array.prototype.slice.call(tableBody.querySelectorAll('tr:not(:last-child)'));
+	addChangeEventHandlerToOtherOptions(input, otherOptions, true, false);
 }
 
 // --------------------  FILTER PANEL BLOCK END -------------------- 
@@ -554,7 +723,7 @@ function switchCardView() {
 	cardElem.querySelector('.card__table-container').classList.toggle('js-hidden');
         cardElem.querySelector('.icon_table').classList.toggle('js-hidden');
         cardElem.querySelector('.icon_chart').classList.toggle('js-hidden');
-        cardElem.querySelector('.card__footnote').classList.toggle('js-hidden');  // footnote text is only for chart view
+        cardElem.querySelector('.card__footnote') && cardElem.querySelector('.card__footnote').classList.toggle('js-hidden');  // footnote text is only for chart view
         if(cardElem.querySelector('.tablesaw-bar')) {
            if (cardElem.querySelector('.card__table-container').classList.contains('js-hidden')) {
                cardElem.querySelector('.tablesaw-bar').classList.add("js-hidden");
@@ -572,6 +741,16 @@ function restoreCardViewFromSession () {
         cardSwitchers.forEach(function (item) {
             switchCardView.call(item);
        });
+	   
+	   /*if (ReportTemplateConfig.isInCompareMode) {
+		   var cardSwitchersKpiResizable = Array.prototype.slice.call(document.querySelectorAll(".card__switcher_kpi-resizable"));
+		   cardSwitchersKpiResizable.forEach(function (item, index) {
+			   var iconTable = item.querySelector('.icon_table:not(.js-hidden)');
+			   iconTable && handleResizeKpiContent(iconTable, index, '.card_type_kpi-resizable_', true);
+			   var iconChart = item.querySelector('.icon_chart:not(.js-hidden)');
+			   iconChart && handleResizeKpiContent(iconChart, index, '.card_type_kpi-resizable_', true);
+		   });
+	   }*/
     }
 }
 
@@ -589,12 +768,22 @@ function processStickySettingsOnResize(card){
         return sum + setting.offsetWidth
     }, 0));
 
+	var cardHeader = card.querySelector('.card__header');
     if (settingsWidth >= cardSettingsLineWidth || (cardClasses.indexOf('card_has-sticky-settings') >= 0 && stickySettings.filter(isStickySettingShiffted).length > 0)) {
         card.classList.remove('card_has-sticky-settings'); // set standard padding
         card.classList.add('card__settings_sticky-disabled'); //style for small screen
+		
+		card.style.paddingTop = "";
+		
     } else if (settingsWidth < cardSettingsLineWidth) {
         card.classList.remove('card__settings_sticky-disabled'); //style for big screen
         card.classList.add('card_has-sticky-settings'); // set padding for sticky settings
+		
+		var maxSettingsHeight = 0;
+		stickySettings.forEach(function(setting) {
+			maxSettingsHeight = maxSettingsHeight < setting.offsetHeight ? setting.offsetHeight : maxSettingsHeight;
+		});
+		card.style.paddingTop = (maxSettingsHeight + 15) + 'px';
     }
 }
 
@@ -602,6 +791,53 @@ function processStickyCardsOnResize() {
   var cards = Array.prototype.slice.call(document.querySelectorAll('.card_has-sticky-settings, .card__settings_sticky-disabled'));
   cards.forEach(processStickySettingsOnResize);
 }
+
+/*function handleResizeKpiContent(cardSwitcher, cardSwitcherIndex, kpiClassSelector, isRestore) {
+	var KPIs = Array.prototype.slice.call(document.querySelectorAll(kpiClassSelector + cardSwitcherIndex));
+	var trendCardContent;
+		
+	if (KPIs.length > cardSwitcherIndex && KPIs[cardSwitcherIndex]) {	
+		if (!isRestore) {
+			if (cardSwitcher.classList.contains('icon')) {
+				if (cardSwitcher.classList.contains('js-hidden')) {
+					trendCardContent = cardSwitcher.parentNode.parentNode;
+				} else {
+					return;
+				}
+			} else {
+				trendCardContent = cardSwitcher.parentNode;
+			}
+		} else {		
+			trendCardContent = cardSwitcher.parentNode.parentNode;
+		}
+		
+		var tempKPI = KPIs[cardSwitcherIndex];
+		var kpiHeader = tempKPI.querySelector('.card__header');
+		var kpiContent = tempKPI.querySelector('.card__content');
+		var kpiFooter = tempKPI.querySelector('.card__footer');
+		if (!kpiContent) {
+			return;
+		}
+		
+		var paddings = 30;
+		var kpiContentHeight = trendCardContent.offsetHeight;
+		
+		var listItems = Array.prototype.slice.call(kpiContent.querySelectorAll('.line-list__item'));
+		if (listItems.length <= 0) {
+			return;
+		}
+		
+		kpiContent.style.paddingTop = 0;
+		kpiContent.style.paddingBottom = 0;		
+		
+		if (kpiContentHeight < listItems[0].offsetHeight * 4 && listItems.length >= 4) {
+			kpiContent.style.height = (listItems[0].offsetHeight * 4) + 'px';
+			return;
+		}
+		
+		kpiContent.style.height = (Math.floor(kpiContentHeight / listItems[0].offsetHeight) * listItems[0].offsetHeight)  + 'px';
+	}
+}*/
 
 // --------------------  CARD END -------------------- 
 
@@ -616,7 +852,10 @@ function processStickyCardsOnResize() {
 */
 
 function isSortingAllowed(tableContainer) {
-	return !tableContainer.querySelector('tbody td[rowspan]'); //if nested headers exist
+	return !tableContainer.querySelector('tbody td[rowspan]') && 
+		(tableContainer.querySelector('thead td:not([colspan]), thead th:not([colspan])') && !tableContainer.querySelector('thead tr:nth-child(2)') || 
+		tableContainer.querySelector('thead td[colspan="3"], thead th[colspan="3"]') && !tableContainer.querySelector('thead tr:nth-child(3)'));
+		//if nested row and column headers exist
 }
 
 
@@ -699,6 +938,7 @@ function processThPerConfig(table, config) {
 }
 
 
+
 /**
 *Define attributes that define how sorting works based on column content
 *@param {Element} table row
@@ -721,11 +961,15 @@ function getColumnSortingAttributes(row, attributes, definedAttrNum) {
 			var value = cells[i].innerHTML;
 			var txtVal =  cells[i].innerText;
 			
-			if(txtVal !== '' && !isNaN(Number(value))) { // try to convert to number -> number sorting
+			if(txtVal !== '' && !isNaN(castToNumber(value))) { // try to convert to number after  -> number sorting
 				attributes[i] = 'data-tablesaw-sortable-num';
 				definedAttrNum+=1;
 			} else if(cells[i].querySelector('.barchart') && value.indexOf('barchart__bar_type_distribution')>=0) { // if distribution barchart is found
-				attributes[i] = 'data-tablesaw-sortable-distribution';
+				if (value.indexOf('title=')>=0) { // if this distribution is on Results page
+					attributes[i] = 'data-tablesaw-sortable-distribution';
+				} else { // if this distribution is on Categorical page				
+					attributes[i] = 'data-tablesaw-sortable-two-part-distribution';
+				}
 				definedAttrNum+=1;
 			} else if(cells[i].querySelector('.barchart') && value.indexOf('barchart__bar_type_score-vs-norm')>=0) { //if score vs norm barchart is found
 				attributes[i] = 'data-tablesaw-sortable-scorevsnorm';
@@ -748,7 +992,7 @@ function getColumnSortingAttributes(row, attributes, definedAttrNum) {
 *@return {Number}
 */
 function calcChartSectionWidth(sum, node) {
-	return sum + parseInt(node.style.width); 
+	return sum + parseInt(node.style.width.indexOf('%') < 0 ? node.style.width : node.style.width.replace('%', '')); 
 };
 
 /**
@@ -785,8 +1029,8 @@ function applySorting() {
 
 		return function( a, b ) {
 			
-			var aVal = Number(a.element.innerHTML);
-			var bVal = Number(b.element.innerHTML);
+			var aVal = castToNumber(a.element.innerHTML);
+			var bVal = castToNumber(b.element.innerHTML);
 			
 			aVal = isNaN(aVal) ? -100000 : aVal;
 			bVal = isNaN(bVal) ? -100000 : bVal;
@@ -840,6 +1084,26 @@ function applySorting() {
 				return aNodesNeg.length < bNodesNeg.length ? 1 : -1;
 			}
 
+		};
+	});
+	
+	$( "th[data-tablesaw-sortable-two-part-distribution]" ).data( "tablesaw-sort", function( ascending ) {
+		return function( a, b ) {
+
+			var aNodesValue =  Array.prototype.slice.call(a.element.querySelectorAll('.barchart__bar_type_distribution:first-child'));	   
+			var bNodesValue =  Array.prototype.slice.call(b.element.querySelectorAll('.barchart__bar_type_distribution:first-child'));
+			
+			var aWidthValue = aNodesValue.reduce(calcChartSectionWidth, 0);
+			var bWidthValue = bNodesValue.reduce(calcChartSectionWidth, 0);
+
+			if(aWidthValue+bWidthValue>0) {
+				if( ascending ) {
+					return aWidthValue >= bWidthValue ? 1 : -1;
+				} else { // descending
+					return aWidthValue < bWidthValue ? 1 : -1;
+				}
+			}
+			
 		};
 	});
 	
@@ -936,13 +1200,16 @@ function applyTableSaw() {
    Tablesaw.init();
 
    //otherwise native tablesaw script removes this event handler
-   setTimeout(function() { 
-        var colHeaders = Array.prototype.slice.call(document.querySelectorAll('.tablesaw-sortable-btn'));
-	colHeaders.forEach(function(colHeader){
+   //setTimeout(
+   window.addEventListener("tablesawcreate",
+   function() { 
+		var colHeaders = Array.prototype.slice.call(document.querySelectorAll('.tablesaw-sortable-btn'));
+		colHeaders.forEach(function(colHeader){
 		colHeader.addEventListener('click', hideDimensionHeaders);
-                colHeader.setAttribute('title', ReportTemplateConfig.translations.Sorting);
+		colHeader.setAttribute('title', ReportTemplateConfig.translations.Sorting);
 	});
-   }, 500);
+   });
+   //}, 500);
 
 }
 
@@ -1009,7 +1276,7 @@ function processDimensionTotals (tableContainer) {
 
 function saveRowOrderInAttribute(tableContainer) {
 	
-	var resetSortingBtn = tableContainer.querySelector('.btn_resetTableSorting');
+	var resetSortingBtn = tableContainer.parentNode.querySelector('.btn_resetTableSorting');
 	
 	if(!isSortingAllowed(tableContainer) && resetSortingBtn) {
 		resetSortingBtn.classList.add('hidden');
@@ -1077,10 +1344,14 @@ function resetTableSorting(e) {
 	var table = findAncestor(resetBtn, 'card__table-container').querySelector('table');
 	var tbody = table.querySelector('tbody');
 	var sortedTh = table.querySelectorAll('.tablesaw-sortable-descending, .tablesaw-sortable-ascending'); //only one in fact
-	var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+	var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));	
 	
-	sortedTh[0].classList.remove('tablesaw-sortable-descending'); //clear sorting styles
-	sortedTh[0].classList.remove('tablesaw-sortable-ascending');	
+	//clear sorting styles
+	if (sortedTh[0]) {
+		sortedTh[0].classList.remove('tablesaw-sortable-descending'); 
+		sortedTh[0].classList.remove('tablesaw-sortable-ascending'); 
+	}
+	
 	rows.sort(defaultTableSorting); //sort rows as at initial load
 	
 	for(var i=0; i<rows.length; i++) { //sort dom elements of rows
@@ -1088,6 +1359,363 @@ function resetTableSorting(e) {
 		rows[i].classList.remove('table-container__row_hidden'); //show hidden rows
 	}
 }
+
+/**
+* DEPRECATED
+* event handler for creating a tooltip when the results table's cell is clicked in the compare mode
+*/
+
+/*function createTableTooltip(e) {
+	
+  var element = e.target;
+  
+  if (element.querySelector('.tooltip') || element.classList.contains('tooltip')) return;
+  
+  removeAllTooltipsFromTable();
+  
+  if (parseInt(element.getAttribute('base'))>0) {
+    var baseNum = element.hasAttribute('base') ? element.getAttribute('base') : '-';
+    var scoreNum = element.hasAttribute('score') ? element.getAttribute('score') : '-';
+    var qTitle = element.parentNode.querySelector('td').innerHTML;
+    var popUp = document.createElement('article');
+    popUp.className = 'table__tooltip tooltip';
+    popUp.innerHTML = '<header class="tooltip__header">"' + qTitle + '"</header>';
+    popUp.innerHTML += '<segment class="tooltip__body">' + 
+		'<div class="tooltip__body__line">' +
+			'<div class="tooltip__body__line__label">' + ReportTemplateConfig.translations.ShareOfAnswers + ':</div>' + 
+			'<div class="tooltip__body__line__value">' + element.innerHTML + '</div>' + 
+		'</div>' + 
+		'<div class="tooltip__body__line">' + 
+			'<div class="tooltip__body__line__label">' + ReportTemplateConfig.translations.NumberOfAnswers + ':</div>' + 
+			'<div class="tooltip__body__line__value">' + baseNum + '</div>' + 
+		'</div>' + 
+		'<div class="tooltip__body__line">' + 
+			'<div class="tooltip__body__line__label">' + ReportTemplateConfig.translations.Score + ':</div>' + 
+			'<div class="tooltip__body__line__value">' + scoreNum + '</div>' + 
+		'</div>' + 
+	'</segment>';
+    //popUp.addEventListener("click", removeTableTooltip_Itself);
+    element.appendChild(popUp); 
+
+    var parentTable = element.parentNode;
+    while (parentTable.tagName != 'TABLE') {
+        parentTable = parentTable.parentNode;
+    }
+    var offsetVertical = parentTable.offsetHeight - (element.offsetTop + popUp.offsetHeight); // Table height - (Clicked element position + Tooltip height)
+    if (offsetVertical < 0) popUp.style.top = offsetVertical + 'px';
+
+  }
+  e.stopPropagation();   
+}*/
+
+function createTableTooltip(element) {
+	if (parseInt(element.getAttribute('base'))>0) {
+		var percentNum = element.hasAttribute('percent') ? element.getAttribute('percent') : '-';
+		var baseNum = element.hasAttribute('base') ? element.getAttribute('base') : '-';
+		var scoreNum = element.hasAttribute('score') ? element.getAttribute('score') : '-';
+		var qTitle = element.parentNode.querySelector('td').innerHTML;
+		
+		var popUp = document.createElement('article');
+		popUp.innerHTML = '<header class="tooltip__header">"' + qTitle + '"</header>';
+		popUp.innerHTML += '<segment class="tooltip__body">' + 
+			'<div class="tooltip__body__line">' +
+				'<div class="tooltip__body__line__label">' + ReportTemplateConfig.translations.ShareOfAnswers + ':</div>' + 
+				'<div class="tooltip__body__line__value">' + percentNum + '</div>' + 
+			'</div>' + 
+			'<div class="tooltip__body__line">' + 
+				'<div class="tooltip__body__line__label">' + ReportTemplateConfig.translations.NumberOfAnswers + ':</div>' + 
+				'<div class="tooltip__body__line__value">' + baseNum + '</div>' + 
+			'</div>' + 
+			'<div class="tooltip__body__line">' + 
+				'<div class="tooltip__body__line__label">' + ReportTemplateConfig.translations.Score + ':</div>' + 
+				'<div class="tooltip__body__line__value">' + scoreNum + '</div>' + 
+			'</div>' + 
+		'</segment>';
+	
+		jQuery(element).tooltip({
+			content: popUp,
+			tooltipClass: 'table__tooltip tooltip',
+			track: true,
+			items: 'td'
+		});
+	}
+}
+
+/**
+* event handler for removing the tooltip by clicking on it
+*/
+
+function removeTableTooltip_Itself(e){
+  var element = e.target;
+  var tooltip = element.parentNode.removeChild(element);
+  e.stopPropagation();
+}
+
+/**
+* event handler for removing the tooltip by clicking anywhere outside the tooltip
+*/
+
+function removeTableTooltip_Outside(e){
+  var element = e.target;
+  if(!element.hasAttribute('base') && element.className.indexOf('table__tooltip') < 0) {
+    removeAllTooltipsFromTable();
+  }
+}
+
+/**
+* remove all tooltips from the table
+*/
+
+function removeAllTooltipsFromTable() {
+  var tooltips = document.querySelectorAll('.table__tooltip');
+  if(tooltips && tooltips.length > 0) {
+    for(var i = 0; i < tooltips.length; i++) {
+      var deletedTooltip = tooltips[i].parentNode.removeChild(tooltips[i]);
+    }
+  }
+}
+
+/*
+* apply styling changes to resitls table in compare mode (inc. event listeners for the tooltips)
+*/
+
+function editResutlsTableInCompareMode() {
+	if(ReportTemplateConfig.isInCompareMode && ReportTemplateConfig.executionMode != "PdfExport") {
+		var table = document.querySelector('.table-container_results table');
+		
+		var topColspans = [];
+		var tempColspanIndex = 0;	
+		var subHeaderCells;		
+		
+		if(table) {			
+			//window.addEventListener("click", removeTableTooltip_Outside);
+			var headerRows = table.querySelectorAll('thead tr');
+			//var columnCellCounts = [];
+			if(headerRows && headerRows.length > 1) {
+				var topHeaderCells = Array.prototype.slice.call(headerRows[0].querySelectorAll('th'));
+				var subHeader;
+				
+				if (headerRows.length > 2) {
+					var removedSubHeader = headerRows[2].parentNode.removeChild(headerRows[2]);
+					headerRows[1].insertBefore(headerRows[0].children[0].cloneNode(), headerRows[1].children[0]);				
+					subHeader = headerRows[1];
+				} else {
+					var removedSubHeader = headerRows[1].parentNode.removeChild(headerRows[1]);
+				}
+				subHeaderCells = subHeader ? Array.prototype.slice.call(subHeader.querySelectorAll('th')) : undefined;
+				
+				if(topHeaderCells && topHeaderCells.length > 0) {
+					for(var hc = 0; hc < topHeaderCells.length; hc++) {
+						if (topHeaderCells[hc].hasAttribute('rowspan')) { 
+							var rowSpan = topHeaderCells[hc].getAttribute('rowspan');
+							topHeaderCells[hc].setAttribute('rowspan', 1); 
+						}
+						var colSpan = 0;
+						if (topHeaderCells[hc].hasAttribute('colspan')) { 
+							var colSpan = topHeaderCells[hc].getAttribute('colspan');
+							topHeaderCells[hc].setAttribute('colspan', colSpan / 3); 
+						}	
+							
+						if (subHeaderCells && subHeaderCells.length > 0) {
+							var emptyTd = document.createElement('td');
+							emptyTd.classList = 'table-container__empty-cell';
+							if (hc != 0 && hc+1 < topHeaderCells.length) {
+								topHeaderCells[hc+1].parentNode.insertBefore(emptyTd, topHeaderCells[hc+1]);
+								if (topColspans.length > 0) {								
+									topColspans.push(topColspans[topColspans.length - 1] + colSpan/3);
+								} else {								
+									topColspans.push(colSpan/3);
+								}
+							}
+						}
+					}
+				}
+				if(subHeaderCells && subHeaderCells.length > 0) {
+					for(var hc = 0; hc < subHeaderCells.length; hc++) {
+						if (subHeaderCells[hc].hasAttribute('rowspan')) { 
+							var rowSpan = subHeaderCells[hc].getAttribute('rowspan');
+							subHeaderCells[hc].setAttribute('rowspan', 1); 
+						}
+						if (subHeaderCells[hc].hasAttribute('colspan')) { 
+							var colSpan = subHeaderCells[hc].getAttribute('colspan');
+							subHeaderCells[hc].setAttribute('colspan', colSpan / 3); 
+						}	
+							
+						var emptyTd = document.createElement('td');
+						emptyTd.classList = 'table-container__empty-cell';
+						if (hc == topColspans[tempColspanIndex] && hc+1 < subHeaderCells.length) {
+							subHeaderCells[hc+1].parentNode.insertBefore(emptyTd, subHeaderCells[hc+1]);
+							tempColspanIndex++;
+						}
+					}
+				}				
+			}
+
+			tempColspanIndex = 0;
+			var bodyRows = table.querySelectorAll('tbody tr:not(.table-container__row_total)');
+			if(bodyRows && bodyRows.length > 0) {
+				for(var i = 0; i < bodyRows.length; i++) {
+					var bodyRowCells = bodyRows[i].querySelectorAll('td');
+					if(bodyRowCells && bodyRowCells.length > 0) {
+						for(var j = 1; j < bodyRowCells.length-1; j+=3) {							
+							if (ReportTemplateConfig.compareModeType == 'DistributionMode') {								
+								// to make not Score columns have conditional formatting class as Score one does (for PDF)
+								bodyRowCells[j+1].classList.remove(bodyRowCells[j+1].classList[bodyRowCells[j+1].classList.length - 1]);	
+								bodyRowCells[j+1].classList.add(bodyRowCells[j].classList[bodyRowCells[j].classList.length - 1]);
+								bodyRowCells[j+2].classList.remove(bodyRowCells[j+2].classList[bodyRowCells[j+2].classList.length - 1]);	
+								bodyRowCells[j+2].classList.add(bodyRowCells[j].classList[bodyRowCells[j].classList.length - 1]);	
+								
+								bodyRowCells[j+1].style.display = 'none';
+								bodyRowCells[j+2].style.display = 'none';						
+								bodyRowCells[j].classList.add('table-container__cell-with-tooltip');
+								bodyRowCells[j].setAttribute('percent', bodyRowCells[j].innerHTML);
+								bodyRowCells[j].setAttribute('base', bodyRowCells[j+1].innerHTML);
+								bodyRowCells[j].setAttribute('score', bodyRowCells[j+2].innerHTML);							
+								createTableTooltip(bodyRowCells[j]);							
+								var baseCell = bodyRowCells[j+1].parentNode.removeChild(bodyRowCells[j+1]);
+								var scoreCell = bodyRowCells[j+2].parentNode.removeChild(bodyRowCells[j+2]);
+							}
+							
+							if (ReportTemplateConfig.compareModeType == 'ScoreMode') {								
+								// to make not Score columns have conditional formatting class as Score one does (for PDF)
+								bodyRowCells[j].classList.remove(bodyRowCells[j].classList[bodyRowCells[j].classList.length - 1]);	
+								bodyRowCells[j].classList.add(bodyRowCells[j+2].classList[bodyRowCells[j+2].classList.length - 1]);
+								bodyRowCells[j+1].classList.remove(bodyRowCells[j+1].classList[bodyRowCells[j+1].classList.length - 1]);	
+								bodyRowCells[j+1].classList.add(bodyRowCells[j+2].classList[bodyRowCells[j+2].classList.length - 1]);
+								
+								bodyRowCells[j].style.display = 'none';
+								bodyRowCells[j+1].style.display = 'none';							
+								bodyRowCells[j+2].classList.add('table-container__cell-with-tooltip');
+								bodyRowCells[j+2].setAttribute('percent', bodyRowCells[j].innerHTML);
+								bodyRowCells[j+2].setAttribute('base', bodyRowCells[j+1].innerHTML);
+								bodyRowCells[j+2].setAttribute('score', bodyRowCells[j+2].innerHTML);							
+								createTableTooltip(bodyRowCells[j+2]);							
+								var percentCell = bodyRowCells[j].parentNode.removeChild(bodyRowCells[j]);
+								var baseCell = bodyRowCells[j+1].parentNode.removeChild(bodyRowCells[j+1]);
+							}		
+							
+							if (subHeaderCells && subHeaderCells.length > 0) {
+								var emptyTd = document.createElement('td');
+								emptyTd.classList = 'table-container__empty-cell';
+								if (topColspans[tempColspanIndex]-1 == (j-1)/3 && j + 3 < bodyRowCells.length) {
+									bodyRows[i].insertBefore(emptyTd, bodyRowCells[j+3]);
+									tempColspanIndex++;
+								}
+							}
+						}
+					}
+					tempColspanIndex = 0;
+				}
+			}
+		}
+	}
+}
+
+// emptyCellWidth should have some value (not equal to 0), it won't change actual width of emptyCell; to change it change padding in styles file and emptyCellPaddings here
+function fixTableColumnHeaders(tableQuery, cellWidth, minRowHeaderWidth, emptyCellSelector, emptyCellWidth, emptyCellPaddings) {
+	var containers = document.querySelectorAll(tableQuery);
+	for (var i=0; i<containers.length; i++) {
+		var table = containers[i].querySelector("table");
+		if (!table) { continue; }
+		var headers = table.tHead.rows;
+		var N = headers[headers.length-1].cells.length; 
+		var emptyCellsN = Array.prototype.slice.call(table.querySelectorAll("thead tr:last-child " + emptyCellSelector)).length; 
+		var containerStyle = window.getComputedStyle(containers[i]);
+		var paddings = parseFloat(containerStyle.getPropertyValue('padding-left'))+parseFloat(containerStyle.getPropertyValue('padding-right')); 
+		var twidth = Math.max(containers[i].offsetWidth-paddings, minRowHeaderWidth + cellWidth*(N-emptyCellsN-1) + (emptyCellWidth+emptyCellPaddings)*emptyCellsN); 
+		table.style.tableLayout='fixed';
+		for (var j=0; j<headers[0].cells.length; j++) {
+			if (j>0) {
+				var currentCell = headers[0].cells[j];
+				var cols = parseInt(currentCell.getAttribute('colspan'));
+				currentCell.style.width = (cols ? cols*cellWidth : (currentCell.classList.contains(emptyCellSelector.slice(1)) ? emptyCellWidth : cellWidth))+"px";
+			}
+			else headers[0].cells[j].style.width = (twidth - cellWidth*(N-emptyCellsN-1) - (emptyCellWidth+emptyCellPaddings)*emptyCellsN)+"px" ;
+		}
+	}
+}
+
+function fixTableHeaderTitles(tableQuery, maxNofLetters) {
+	var tables = document.querySelectorAll(tableQuery);
+	for (var i=0; i<tables.length; i++) {
+                if (tables[i].querySelectorAll("thead tr").length>1) continue;
+		var headers = tables[i].querySelectorAll("thead tr:last-child th"); 
+		var N = headers.length; 
+                for (var j=1; j<N; j++) {
+                    if (headers[j].firstChild.nodeValue.length>maxNofLetters) headers[j].firstChild.nodeValue =  headers[j].firstChild.nodeValue.substr(0,maxNofLetters-2)+'...';
+                }
+	}
+}
+
+
+function stickTableRowHeaders(tableQuery) {
+	var containers = document.querySelectorAll(tableQuery);
+	for (var i=0; i<containers.length; i++) {
+		var table = containers[i].querySelector("table");
+		if (!table) { continue; }
+		// combine all 1st cells in the header rows in one cell via rowspan
+		var hrows = table.tHead.rows;
+		hrows[0].cells[0].setAttribute('rowspan',hrows.length);
+		for (var j=1; j<hrows.length; j++) {
+			if (hrows[j].cells[0].innerHTML=='') hrows[j].removeChild(hrows[j].cells[0]);
+		}
+		// if 1st cell in a row is combined with others via colspan (super row header) then split it
+		var trows = table.tBodies[0].rows;
+		for (var j=0; j<trows.length; j++) {
+			var cols = parseInt(trows[j].cells[0].getAttribute('colspan'));
+			if (cols>1) {
+				trows[j].cells[0].removeAttribute('colspan');
+				var newCell = trows[j].appendChild(document.createElement('td'));
+				newCell.setAttribute('colspan',cols-1);
+			}
+		}
+	}
+}
+
+function addTooltipOnHoverForRowHeaders(rowHeadersSelector){
+	var rowHeaders = Array.prototype.slice.call(document.querySelectorAll(rowHeadersSelector));
+	rowHeaders.forEach(function(header) {
+		header.setAttribute('title', header.innerText);
+	});	
+}
+
+/*function fixTableColumnHeaders(tableQuery, cellWidth, minRowHeaderWidth) {
+	var tables = document.querySelectorAll(tableQuery);
+	for (var i=0; i<tables.length; i++) {
+		var headers = tables[i].querySelectorAll("thead tr:last-child th");
+		var N = headers.length;                 	
+		var colgroup = document.createElement('colgroup');
+		for (var j=0; j<N; j++) {
+			var col = document.createElement('col');
+			if (j>0) col.width = cellWidth+"px";
+			colgroup.appendChild(col);
+		}
+		tables[i].insertBefore(colgroup,tables[i].firstChild);
+	}
+       fixTableRowHeader(tableQuery, cellWidth, minRowHeaderWidth);
+}
+
+function fixTableRowHeader(tableQuery, cellWidth, minRowHeaderWidth) {	
+	var tables = document.querySelectorAll(tableQuery);
+	for (var i=0; i<tables.length; i++) {
+		var headers = Array.prototype.slice.call(tables[i].querySelectorAll("thead tr:last-child th"));
+		var N = headers.length; 
+		
+		headers.forEach(function(header) {
+			if (header.children[0]) {
+				header.children[0].style.width = cellWidth + "px";
+			}
+		});
+        
+		tables[i].parentElement.style.width = '';
+		var paddings = tables[i].parentElement.offsetWidth-tables[i].offsetWidth;
+        var twidth = tables[i].offsetWidth; 
+ 		if (twidth < minRowHeaderWidth + cellWidth*(N-1)) twidth = minRowHeaderWidth + cellWidth*(N-1);
+		tables[i].parentElement.style.width = (twidth+paddings)+"px"; 
+		var col = tables[i].querySelector("colgroup").firstChild;
+		col.width = (twidth - cellWidth*(N-1))+"px" ;
+	}
+}*/
 
 // --------------------  TABLE END -------------------- 
 
@@ -1255,7 +1883,11 @@ function openRedesignedExportWindow(files, optionsSettings){
 
         // add translations to export windows' texts
         var textsScript = innerDoc.createElement('script');
-        textsScript.innerText = 'var exportTranslations = ' + JSON.stringify(ReportTemplateConfig.exportTranslations) + ';'; 
+        textsScript.innerText = 'var exportTranslations = ' + JSON.stringify({
+			inQueueText: ReportTemplateConfig.translations.InQueue,
+			completedText: ReportTemplateConfig.translations.Completed,
+			errorText: ReportTemplateConfig.translations.Error
+		}) + ';'; 
         textsScript.type = "text/javascript"; 
         innerDoc.head.appendChild(textsScript);
 
@@ -1488,7 +2120,7 @@ function showCommentsNumber () {
 	}
 	header.appendChild(elem);
         // tooltip text with the number of records
-        header.title = ReportTemplateConfig.commentNumber + numberOfComments;
+        header.title = ReportTemplateConfig.translations.CommentNumber + numberOfComments;
 }
 
 
@@ -1643,7 +2275,7 @@ function formatSelectedDropdownOption (item) {
 
     // add text 'Score' as a prefix for score dropdowns
     if (item.element && findAncestor(item.element, 'reportal-select_type-score')) {
-       prefix = ReportTemplateConfig.score+': ';
+       prefix = ReportTemplateConfig.translations.Score+': ';
     }
 
     return prefix + text;
@@ -1661,9 +2293,9 @@ function getDefaultPlaceholderText (element) {
  
     // add text 'Select a tag' for tag dropdowns
     if (findAncestor(element, 'reportal-select_type-tag')) {
-       return ReportTemplateConfig.tagPlaceholderTxt;
+       return ReportTemplateConfig.translations.TagQuestion;
     }
-    return ReportTemplateConfig.defaultPlaceholderTxt;
+    return ReportTemplateConfig.translations.BreakBy;
 }
 
 
@@ -1707,7 +2339,153 @@ function initialiseSelect2 () {
 	}
 }
 
+function addPlaceholdersToMultiSettings(container, placeholderText) {
+  var settings = Array.prototype.slice.call(document.querySelectorAll(container));
+  settings.forEach(function(setting, index) {
+    var placeholder = document.createElement('div');
+    placeholder.classList.add('setting__placeholder');
+    placeholder.classList.add('select2-selection');
+    placeholder.classList.add('select2-selection--multiple');
+
+    var placeholderTextElement = document.createElement('span');
+    placeholderTextElement.classList.add('select2-selection__rendered');
+    placeholderTextElement.innerText = placeholderText;
+
+    var placeholderArrowElement = document.createElement('span');
+    placeholderArrowElement.classList.add('select2-selection__arrow');
+    placeholderTextElement.innerText = placeholderText;
+    var bElement = document.createElement('b');
+    placeholderArrowElement.appendChild(bElement);
+
+    placeholder.appendChild(placeholderTextElement);
+    placeholder.appendChild(placeholderArrowElement);
+
+    placeholder.addEventListener('click', function() { jQuery(container + ':nth-child(' + (index + 1) + ') select').select2('open'); });
+    document.addEventListener('click', function(e) {
+      var isClickInside = placeholder.contains(e.target);
+
+      if (isClickInside) {
+        placeholder.classList.add('setting__placeholder--open');
+      } else {
+        placeholder.classList.remove('setting__placeholder--open');
+      }
+    });
+
+    setting.insertBefore(placeholder, setting.children[0]);
+  })
+}
+
 // --------------------  DROPDOWNS END ------------------- 
+
+
+// -------------------- KPI CARD -------------------
+
+function addKPICards(gaugeData, colors) {	
+	gaugeData.forEach(function(currentGaugeData) {
+		addKPICard(currentGaugeData, colors);
+	});	
+}
+
+function addKPICard(gaugeData, colors) {
+	var container = document.getElementById("kpi-data-container-" + gaugeData.qid);
+	if (!container) {
+		return;
+	}
+	if (gaugeData.score) {
+		var value = gaugeData.score;
+		container.classList.add("gauge");
+		createGauge({
+			container: container, 
+			colors: ReportTemplateConfig.gaugeThreshold, 
+			greyColor: ReportTemplateConfig.Styling.greyColor, 
+			type: ReportTemplateConfig.gaugeType, 
+			value: gaugeData.score
+		});
+	} else if (gaugeData.multiScore) {
+		createKPILineList(container, gaugeData.multiScore, colors);
+	}
+}
+
+function createKPILineList(container, values, colors) {
+	if (Array.isArray(values)) {
+		values.forEach(function(value, index) {
+			//value.color = Highcharts.charts[0].series[index].color; //doesn't work because chart can't load in time 
+			value.color = colors[index % colors.length];
+		})
+		
+		createSortBtn(container, function(e) {
+			var btn = e.target;
+			var sorting;
+								
+			if (btn.classList.contains('card__sort-btn_descending')) {	
+				sorting = 'ascending';
+				btn.classList.remove('card__sort-btn_descending');	
+				btn.classList.add('card__sort-btn_ascending');			
+			} else if (btn.classList.contains('card__sort-btn_ascending')) {		
+				btn.classList.remove('card__sort-btn_ascending');			
+			} else {
+				btn.classList.add('card__sort-btn_descending');
+				sorting = 'descending';
+			}
+			
+			container.innerHTML = '';
+			
+			createLineList({
+				container: container,
+				greyColor: ReportTemplateConfig.Styling.greyColor, 
+				values: values.slice(), //to make a copy of an array
+				svgSettings: {
+					x: 1.5,
+					y: 2,
+					strokeWidth: 3
+				}
+			}, sorting);
+		});
+	}
+		
+	createLineList({
+		container: container,
+		greyColor: ReportTemplateConfig.Styling.greyColor, 
+		values: values,
+		svgSettings: {
+			x: 1.5,
+			y: 2,
+			strokeWidth: 3
+		}
+	});
+}
+
+// -------------------- KPI CARD END -------------------
+
+// -------------------- TREND LINE -------------------
+
+function addPrefixesToTrendTableAndChart(questions, numerationPrefix) {
+	var connector = numerationPrefix.connector;
+	var prefixes = [];
+	questions.forEach(function(questionOptions) {
+		var indexOfConnector = questionOptions.Label.indexOf(connector);
+		prefixes.push(questionOptions.Label.slice(0, indexOfConnector));
+	});
+	
+	YUI().use('event-custom', function(Y) {
+		Y.Global.on('cf:chartBeforeCreate', function(eventData) {				
+			var series = eventData.chartOptions.series;
+			series.forEach(function(s, index) {
+				s.name = prefixes[Math.floor(index / (series.length / prefixes.length))] + connector + s.name;
+			});
+		});
+	});
+	
+	var trendTables = Array.prototype.slice.call(document.querySelectorAll('.card_type_trend .card__table-container table'));
+	trendTables.forEach(function(table) {
+		var rowLabels = Array.prototype.slice.call(table.querySelectorAll('tbody tr td:first-child'));
+		rowLabels.forEach(function(label, index) {
+			label.innerText = prefixes[Math.floor(index / (rowLabels.length / prefixes.length))] + connector + label.innerText;
+		});
+	});
+}
+		
+// -------------------- TREND LINE END -------------------
 
 
 // --------------------  PAGE CATEGORICAL -------------------- 
@@ -1760,7 +2538,7 @@ function clickCategoricalButton(e) {
 		sessionStorage.setItem('drilldownScrollingTarget', '');
 	}
 	
-	viewmode.showWait();
+	reportal.showWait();
 	drilldownBtn.click();
 }
 
@@ -1799,7 +2577,7 @@ function addClickFunctionsToCategoricalButtons() {
 }
 
 function addClickFunctionToCategoricalScrollUpButton() {
-	var scrollUpButton = document.querySelector('.btn_scrollUp.table-container__control');
+	var scrollUpButton = document.querySelector('.btn_scrollUp');
 	if (scrollUpButton) {
 		scrollUpButton.addEventListener('click', scrollToActiveCard);
 	}
@@ -1918,7 +2696,15 @@ function clickHitlistCloseButton() {
 
 
 
-function pageInit() {
+function pageInit() {	
+	
+	  //fix loader position on mobiles when we go from landscape mode to portrait
+      window.addEventListener('load', function() {
+      	  var loader = document.querySelector('#wait_c');
+          if (loader) {
+              loader.style.left = 0;
+          }
+      });
 
 	  //make reportal a web-app via  tags
 	  addMeta([{ name: 'viewport', content: 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no' }]);
@@ -1946,6 +2732,7 @@ function pageInit() {
 	  //ADMIN-MENU
 	  document.querySelector('.admin-menu_type_general').addEventListener('click', toggleAdminMenu);
 	  window.addEventListener('click', adminMenuBlur);
+	  
 
           //FILTER-PANE
 	  document.querySelector('.filter-pane__btn').addEventListener('click', toggleFilterPanel);
@@ -1956,6 +2743,16 @@ function pageInit() {
 	  var filterNames = Array.prototype.slice.call(document.querySelectorAll('.filter-pane__section .filter__name'));
 	  filterNames.forEach(function (el) {
 		el.addEventListener('click', handleToggleFilter);
+	  });
+	  // add 'All' option to filter__selector_with-all
+	  var filterSelectorsWithAll = Array.prototype.slice.call(document.querySelectorAll('.filter__selector_with-all'));
+	  filterSelectorsWithAll.forEach(function(selector) {
+		  addAllOptionToFilterSelector(selector);
+	  });
+	  // add 'Other' ('Score') option to filter__selector_with-other
+	  var filterSelectorsWithOther = Array.prototype.slice.call(document.querySelectorAll('.filter__selector_with-other'));
+	  filterSelectorsWithOther.forEach(function(selector) {
+		  addClickCallbackOnOtherOptionToFilterSelector(selector);
 	  });
 	  // redesign reportal checkboxes for filters
 	  var filterBoxes = Array.prototype.slice.call(document.querySelectorAll('.filter__selector td'));
@@ -1971,7 +2768,7 @@ function pageInit() {
             findAncestor(hierContainer, 'filter').classList.add('hidden');
           }
           // check if there are active filters to be shown expanded          
-          var filterSelectors = Array.prototype.slice.call(document.querySelectorAll('.filter-pane__section_type_filters .filter'));
+          var filterSelectors = Array.prototype.slice.call(document.querySelectorAll('.filter-pane__section:not(.filter-pane__section_type_surveys) .filter'));
           var activeFilterSelectors = filterSelectors.filter(function (selector) {
              return !!selector.querySelector('input:checked');
           });
@@ -1979,6 +2776,7 @@ function pageInit() {
                 toggleFilter(item);
           });
           addFunctionalButtonsToFilterList(ReportTemplateConfig.translations.Apply, ReportTemplateConfig.translations.Reset);
+		  addLoaderOnDistributionButton();
          
 
           // CALENDARS
@@ -2010,8 +2808,13 @@ function pageInit() {
 
 			// simulate clicking on the image to pick a date in the calendar
 			datePicker.addEventListener('click', function (event) {
-				var imgElement = findAncestor(event.target, 'calendar__control').querySelector('img');
-				imgElement.click();
+				var calendar = findAncestor(event.target, 'calendar__control');
+				if (calendar) {
+					var imgElement = calendar.querySelector('img');
+					if (calendar) {
+						imgElement.click();
+					}
+				}
 			});
 
 			// update placeholder texts for inputs  
@@ -2030,7 +2833,7 @@ function pageInit() {
 			calendar.setAttribute('src','https://author.euro.confirmit.com/isa/BDJPFRDMEYBPBKLVADAYFQCDAVIOEQJR/ENNOVA%20TEMPLATE%20(Reportal)/calender.PNG');
 		});
 	}
-
+	
 	  // HITLIST
           /*Fix for https://jiraosl.firmglobal.com/browse/TQA-4590*/
           if (!String.prototype.includes) {
@@ -2068,8 +2871,8 @@ function pageInit() {
 
                       // rename score column
                       if (!document.querySelector('#page_wordclouds')) {
-                            document.querySelector(".card_type_comments .hitlist th:nth-child(3) div").fullText = ReportTemplateConfig.score;
-                            document.querySelector(".card_type_comments .hitlist th:nth-child(3) div").childNodes[0].textContent = ReportTemplateConfig.score;
+                            document.querySelector(".card_type_comments .hitlist th:nth-child(3) div").fullText = ReportTemplateConfig.translations.Score;
+                            document.querySelector(".card_type_comments .hitlist th:nth-child(3) div").childNodes[0].textContent = ReportTemplateConfig.translations.Score;
                             document.querySelector(".card_type_comments .hitlist th:nth-child(3) div").childNodes[1].textContent = '';
                             if (document.querySelector(".card_type_comments .hitlist th:nth-child(3) div").childNodes[2]) {
                                document.querySelector(".card_type_comments .hitlist th:nth-child(3) div").childNodes[2].textContent = '';
@@ -2085,7 +2888,7 @@ function pageInit() {
                       // Card Type: card__hitlist-container no data message
                       var trendHitlist_03 = Array.prototype.slice.call(document.querySelectorAll(".card__hitlist-container .yui3-datatable-message-content"));
                       trendHitlist_03.forEach(function (item) {
-                          var strMessage = ReportTemplateConfig.noDataWarning;
+                          var strMessage = ReportTemplateConfig.translations.NoDataToDisplay;
                           if(item.innerHTML.trim() == strMessage ){
 		              item.classList.add("NoDatatoDisplay");
                               item.classList.add("NoDatatoDisplay_FontMedium");
@@ -2096,14 +2899,14 @@ function pageInit() {
                      enableResetHitlistSortingButton(hitlistContainer);
                 }
 	  });
+	  
 
           // VERBATIM TABLES
           window.addEventListener('load', styleVerbatimTables);
-
  
           //  HIGHCHARTS 	
           YUI().use('event-custom', function (Y) {
-		Y.Global.on('cf:chartBeforeCreate', function (eventData) {
+			Y.Global.on('cf:chartBeforeCreate', function (eventData) {
 
                         var chart = eventData.chartOptions.chart;
 
@@ -2130,11 +2933,11 @@ function pageInit() {
                         eventData.chartOptions.tooltip.useHTML = true;
                         eventData.chartOptions.tooltip.formatter = function() {
                               if (eventData.chartOptions.series.length == 1) {
-                                 return this.key +  '<br>' + ReportTemplateConfig.translations.Avg +': '+ this.y.toFixed(ReportTemplateConfig.Decimal);
+                                 return this.key +  '<br>' + (ReportTemplateConfig.chartTooltipLabel ? ReportTemplateConfig.chartTooltipLabel : ReportTemplateConfig.translations.Avg) +': '+ this.y.toFixed(ReportTemplateConfig.Decimal);
                               }
 
                               // if more than 1 line in the trend chart, series names should be displayed to distinguish KPIs 
-                              return  this.key +  '<br>' + ReportTemplateConfig.translations.Avg +': '+ this.y.toFixed(ReportTemplateConfig.Decimal) + '<br><br>' + this.series.name.replace(/ *\([^)]*\) */g, "");
+                              return  this.key +  '<br>' + (ReportTemplateConfig.chartTooltipLabel ? ReportTemplateConfig.chartTooltipLabel : ReportTemplateConfig.translations.Avg) +': '+ this.y.toFixed(ReportTemplateConfig.Decimal) + '<br><br>' + this.series.name.replace(/ *\([^)]*\) */g, "");
                         }
 
                         //  prevent wrapping and overlapping of x labels
@@ -2143,6 +2946,23 @@ function pageInit() {
 		
                         //  add space between chart and xAxis labels
                         eventData.chartOptions.xAxis.offset = 15;
+												
+						// prevent cut of of chart lines (JOU-117)
+						var hasZeroYPoint = false;
+						for (var i = 0; i < eventData.chartOptions.series.length; i++) {
+							var currSeries = eventData.chartOptions.series[i];
+							for (var j = 0; j < currSeries.data.length; j++) {
+								var currData = currSeries.data[j];
+								if (currData.y == 0) {
+									hasZeroYPoint = true;
+									break;
+								}
+							}
+						}
+						if (hasZeroYPoint) {
+							eventData.chartOptions.yAxis.min = -1;
+						}
+						
 
 			// make point bigger
 			eventData.chartOptions.plotOptions.series.marker = {
@@ -2152,7 +2972,11 @@ function pageInit() {
 			};  
  
                         // avoid overlapping data labels and markers
-			eventData.chartOptions.plotOptions.series.dataLabels.padding= 10;
+			eventData.chartOptions.plotOptions.series.dataLabels.enabled = true;
+			eventData.chartOptions.plotOptions.series.dataLabels.padding = 10;
+			eventData.chartOptions.plotOptions.series.dataLabels.allowOverlap = true;
+			
+			
    
 		});
 
@@ -2167,12 +2991,16 @@ function pageInit() {
         //TABLES
         applyTableSaw();
         prepareTablesForStyling();
+		
+		addTooltipOnHoverForRowHeaders(".table-container table tbody tr td:first-child");
         
         var resetSortBtns = Array.prototype.slice.call(document.querySelectorAll('.btn_resetTableSorting '));
         resetSortBtns.forEach(function(btn) {
         	btn.addEventListener('click', resetTableSorting);                
         	btn.setAttribute('title', ReportTemplateConfig.translations.ResetSorting);
         });
+	
+		editResutlsTableInCompareMode();
 
 
 
@@ -2180,7 +3008,18 @@ function pageInit() {
        var cardSwitchers = Array.prototype.slice.call(document.querySelectorAll(".card__switcher"));
        cardSwitchers.forEach(function (item) {
            item.addEventListener('click', handleSwitchCardView);
-       });
+       });	   
+	   
+	   /*if (ReportTemplateConfig.isInCompareMode) {
+		   var cardSwitchersKpiResizable = Array.prototype.slice.call(document.querySelectorAll(".card__switcher_kpi-resizable"));
+		   cardSwitchersKpiResizable.forEach(function (item, index) {
+				var iconTable = item.querySelector('.icon_table');
+				item.addEventListener('click', function(e) { 
+					handleResizeKpiContent(e.target, index, '.card_type_kpi-resizable_'); 
+					e.preventDefault();
+				});
+		   });
+	   }*/
 
        window.addEventListener('load',processStickyCardsOnResize);
        window.addEventListener('resize',processStickyCardsOnResize);
@@ -2193,35 +3032,36 @@ function pageInit() {
 
 
 	//KPI_CARDS
-        if (ReportTemplateConfig.gaugeData) {
-		ReportTemplateConfig.gaugeData.forEach(function(currentGaugeData) {
-        		var value = currentGaugeData.score;
-        		var container = document.getElementById("gauge-container-" + currentGaugeData.qid);
-        		container.classList.add("gauge");
-        		createGauge({
-        			container: container, 
-        			colors: ReportTemplateConfig.gaugeThreshold, 
-        			greyColor: ReportTemplateConfig.Styling.greyColor, 
-        			type: ReportTemplateConfig.gaugeType, 
-        			value: currentGaugeData.score
-        		});
-		});	
+	if (ReportTemplateConfig.gaugeData) {
+		var colors = ['#4B4B5C', '#75795A', '#9F7C71', '#893741', '#C7A331', '#CF7D50', '#95AC92', '#30313E', '#C47C80', '#8D8E98', '#59222B', '#DDCA7D', '#5D795E'];
+		YUI().use('event-custom', function(Y) {
+			Y.Global.on('cf:chartBeforeCreate', function(eventData) {
+				colors = eventData.chartOptions.colors;
+				addKPICards(ReportTemplateConfig.gaugeData, colors);
+			});
+		});
+	}
+	
+	//TREND LINE (only on Trends page)
+	if (ReportTemplateConfig.trendQuestions && ReportTemplateConfig.isInCompareMode) {
+		addPrefixesToTrendTableAndChart(ReportTemplateConfig.trendQuestions, ReportTemplateConfig.numerationPrefix);
 	}
 
 
 	//PAGE_CATEGORICAL
-        if (document.querySelector('#page_categorical')) {
+	if (document.querySelector('#page_categorical')) {
 		hideCategoricalDrilldownTable();
  		addStylesToCategoricalDrilldownTable();	
-                addClickFunctionsToCategoricalButtons();
+        addClickFunctionsToCategoricalButtons();
 		addClickFunctionToCategoricalScrollUpButton();
+		
 		// timeout needed because of iPhone issue of stickyHeader function
 		window.addEventListener('load', function() { setTimeout(scrollOnCategoricalPage, 100); });
 	}
 
 
         //PAGE_WORDCLOUDS
-        if (document.querySelector('#page_wordclouds')) {
+	if (document.querySelector('#page_wordclouds')) {
 		var hitlistCloseButton = document.querySelector('.card_type_wordcloud.card_type_comments .card__header__close-btn');
 		if (hitlistCloseButton) {
 			hitlistCloseButton.addEventListener('click', function() {clickHitlistCloseButton()});;
@@ -2237,18 +3077,65 @@ function pageInit() {
 					colorConfig: {color: ReportTemplateConfig.wordcloudMainColor},
 					isOneColored: true,
 					countId: 1,
-					translations: ReportTemplateConfig.translations
+					noDataToDisplayText: ReportTemplateConfig.translations.NoDataToDisplay
 				});	
 			}, 100);
 		});
 
 	}
-
  
-       //DROPDOWNS
-       initialiseSelect2();
+        //DROPDOWNS
+        initialiseSelect2();	 
+		if (ReportTemplateConfig.executionMode === "Web") {
+			window.addEventListener('load', function() {
+				addPlaceholdersToMultiSettings('.card__setting_multi-with-placeholder', ReportTemplateConfig.translations.PleaseSelectQuestions);
+			});
+		}
 
         // General No Data Message Checks
-       window.addEventListener('load', generalNoDataCheck);
-
+        window.addEventListener('load', generalNoDataCheck);
+		
+	if (ReportTemplateConfig.isInCompareMode) {
+		var componentsHiddenForCompareMode = Array.prototype.slice.call(document.querySelectorAll('*[class$="_hidden-in-compare-mode"]'));
+		componentsHiddenForCompareMode.forEach(function(component) {
+			component.classList.remove('layout_page-break-before');
+			component.classList.add('hidden');
+		});
+		
+		var resultTables = Array.prototype.slice.call(document.querySelectorAll('.table-container_results'));
+		resultTables.forEach(function(table) {
+			table.classList.add('table-container_in-compare-mode');
+		});
+	}
+	     		 
+	   
+	//TABLE COLUMNS FIXES
+	/* should be after all functions */
+	if (ReportTemplateConfig.isInCompareMode) {
+		window.addEventListener("load", function() {
+			//fixTableHeaderTitles(".table-container.table-container_fixed-width-headers", 6);	
+			var tableHeadRows = Array.prototype.slice.call(document.querySelectorAll(".table-container.table-container_fixed-width-headers table thead tr"));
+			setTimeout(function () {
+				fixTableColumnHeaders(".table-container.table-container_fixed-width-headers", tableHeadRows.length > 1 ? 50 : 103, 510, '.table-container__empty-cell', 1, 21);
+				stickTableRowHeaders(".table-container__sticky-row-header");
+			}, 600);
+			var cardSwitcher = Array.prototype.slice.call(document.querySelectorAll('.card__switcher'));
+			cardSwitcher.forEach(function(switcher) {
+				switcher.addEventListener('click', function() {
+					var tableIcon = switcher.querySelector('.icon_table');
+					if (tableIcon && !tableIcon.classList.contains('js-hidden')) {
+						fixTableColumnHeaders(".table-container.table-container_fixed-width-headers", tableHeadRows.length > 1 ? 50 : 103, 510, '.table-container__empty-cell', 1, 21);
+					}
+				});
+			});
+		});
+		window.addEventListener("resize", function() {
+			var tableHeadRows = Array.prototype.slice.call(document.querySelectorAll(".table-container.table-container_fixed-width-headers table thead tr"));
+			fixTableColumnHeaders(".table-container.table-container_fixed-width-headers", tableHeadRows.length > 1 ? 50 : 103, 510, '.table-container__empty-cell', 1, 21);
+		});
+	} else {
+		setTimeout(function () {
+			stickTableRowHeaders(".table-container__sticky-row-header:not(.table-container_results)");
+		}, 600);
+	}
 }
