@@ -70,8 +70,16 @@ input[type="submit"]::-moz-focus-inner {
 /* ----- COMPANY-INFO BLOCK ----- */
   .company-info {
       position: absolute;	
-      top: 10px;
+      top: 15px;
       left: 50px;
+  }
+
+  .company-info_logo {
+      margin-right: 20px;
+  }
+
+  .company-info_subtitle {
+      font-style: italic;
   }
 /* ----- COMPANY-INFO BLOCK END ----- */
   
@@ -116,7 +124,7 @@ input[type="submit"]::-moz-focus-inner {
       background-color: #292D31;
       color: #ffffff;
       text-align: right;
-      padding-left: 200px; /* to avoid columns overlap with logo on small screens */
+      padding-left: 250px; /* to avoid columns overlap with logo on small screens */
       min-height: 55px; /* because of logo: either adjust logo height or min-height here */
   }
   
@@ -124,6 +132,11 @@ input[type="submit"]::-moz-focus-inner {
       display: inline-block; /* columns of header are layed out horizontally */
       vertical-align: top;
       text-align: right;
+  }
+
+  .page-header__column_flex {
+      display: flex;
+      align-items: center;
   }
   
   .page-header__column_layout_horizontal > * {
