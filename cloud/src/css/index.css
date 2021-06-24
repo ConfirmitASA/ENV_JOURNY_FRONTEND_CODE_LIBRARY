@@ -1,0 +1,9 @@
+#cloud {
+    width: 100%;
+    height: 400px;
+}
+
+.tag:hover {
+    text-decoration: underline;
+    cursor: pointer;
+}
